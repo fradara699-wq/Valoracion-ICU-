@@ -1,5 +1,11 @@
 import { useState, useEffect } from "react";
 import { InformacionInstitucion, Profesional, ItemValoracionEstructura, ReporteValoracion, EquipoCritico } from "./types";
+import { 
+  isSupabaseConfigured, 
+  guardarInstitucionSupabase, 
+  cargarInstitucionesSupabase, 
+  eliminarInstitucionSupabase 
+} from "./services/supabaseService";
 import { DEFAULT_ESTRUCTURA_ITEMS } from "./data/estructuraItems";
 import { IdentificacionInstitucionalHeader } from "./components/IdentificacionInstitucionalHeader";
 import { InformacionInstitucionForm } from "./components/InformacionInstitucionForm";
@@ -48,8 +54,234 @@ export default function App() {
   });
   // 1. Core States - Multiple Loaded Institutions for Benchmarking
   const [instituciones, setInstituciones] = useState<InformacionInstitucion[]>([]);
-
   const [activeInstId, setActiveInstId] = useState<string>("");
+
+  // Supabase Integration States
+  const [supabaseInstituciones, setSupabaseInstituciones] = useState<any[]>([]);
+  const [loadingSupabase, setLoadingSupabase] = useState<boolean>(false);
+
+  const handleLoadSupabase = async () => {
+    if (!isSupabaseConfigured()) return;
+    setLoadingSupabase(true);
+    try {
+      const rows = await cargarInstitucionesSupabase();
+      setSupabaseInstituciones(rows);
+      
+      // If we got rows, populate the local list of institutions as well!
+      if (rows && rows.length > 0) {
+        // Unpack the institution info from each row
+        const unpackedInsts: InformacionInstitucion[] = rows.map(row => {
+          if (row.data && row.data.institucion) {
+            return {
+              ...row.data.institucion,
+              id: row.id,
+              nombre: row.nombre || row.data.institucion.nombre,
+              ciudad: row.ciudad || row.data.institucion.ciudad,
+              provincia: row.provincia || row.data.institucion.provincia,
+              complejidad: row.complejidad || row.data.institucion.complejidad,
+              evaluadorResponsable: row.evaluador || row.data.institucion.evaluadorResponsable,
+              fechaEvaluacion: row.fecha_evaluacion || row.data.institucion.fechaEvaluacion,
+            };
+          }
+          // fallback if row has no nested payload
+          return {
+            id: row.id,
+            nombre: row.nombre,
+            nombreCorto: row.id,
+            ciudad: row.ciudad,
+            provincia: row.provincia,
+            localidad: row.ciudad,
+            sector: "Público",
+            tipoInstitucion: "Pública",
+            complejidad: row.complejidad as any,
+            camasTotales: 10,
+            camasAisladas: 2,
+            fechaEvaluacion: row.fecha_evaluacion,
+            evaluadorResponsable: row.evaluador,
+            logoInstitucional: "🏥"
+          };
+        });
+
+        setInstituciones(unpackedInsts);
+
+        // Auto-select the first saved institution if activeId is empty
+        if (!activeInstId) {
+          const firstRow = rows[0];
+          handleSelectSupabaseInst(firstRow.id, rows);
+        }
+      }
+    } catch (err) {
+      console.error("Error cargando instituciones desde Supabase:", err);
+    } finally {
+      setLoadingSupabase(false);
+    }
+  };
+
+  const handleSelectSupabaseInst = (id: string, rowsList = supabaseInstituciones) => {
+    const foundRow = rowsList.find(row => row.id === id);
+    if (!foundRow) return;
+
+    const document = foundRow.data || {};
+    
+    // Fallback default state structures if missing inside data
+    const instInfo: InformacionInstitucion = document.institucion || {
+      id: foundRow.id,
+      nombre: foundRow.nombre,
+      nombreCorto: foundRow.nombre.substring(0, 10).toUpperCase(),
+      ciudad: foundRow.ciudad,
+      provincia: foundRow.provincia,
+      localidad: foundRow.ciudad,
+      sector: "Público",
+      tipoInstitucion: "Pública",
+      complejidad: foundRow.complejidad as any,
+      camasTotales: 10,
+      camasAisladas: 2,
+      fechaEvaluacion: foundRow.fecha_evaluacion,
+      evaluadorResponsable: foundRow.evaluador,
+      logoInstitucional: "🏥"
+    };
+
+    setActiveInstId(foundRow.id);
+    
+    // Update local institutions list matching active record
+    setInstituciones(prev => {
+      const exists = prev.some(i => i.id === foundRow.id);
+      const aligned = {
+        ...instInfo,
+        id: foundRow.id,
+        nombre: foundRow.nombre,
+        ciudad: foundRow.ciudad,
+        provincia: foundRow.provincia,
+        complejidad: foundRow.complejidad as any,
+        evaluadorResponsable: foundRow.evaluador,
+        fechaEvaluacion: foundRow.fecha_evaluacion
+      };
+      if (exists) {
+        return prev.map(i => i.id === foundRow.id ? aligned : i);
+      } else {
+        return [...prev, aligned];
+      }
+    });
+
+    // Unpack every subsection state from the active institution document
+    setProfesionales(document.profesionales || []);
+    setEstructuraItems(document.estructuraItems || DEFAULT_ESTRUCTURA_ITEMS.map(item => ({ ...item, cumple: false })));
+    setEquipos(document.equipos || DEFAULT_EQUIPOS_CRITICOS);
+    setReporte(document.reporte || null);
+    
+    if (document.teamworkChecklist) setTeamworkChecklist(document.teamworkChecklist);
+    else setTeamworkChecklist([
+      { id: "tw-1", label: "Pases de guardia estructurados según protocolo SBAR", cumple: false, peso: 8 },
+      { id: "tw-2", label: "Rondas matutinas multidisciplinarias diarias (Médico, Enf, Kine, Farm, Nutri)", cumple: false, peso: 10 },
+      { id: "tw-3", label: "Briefings de seguridad al inicio de cada turno de enfermería", cumple: false, peso: 6 },
+      { id: "tw-4", label: "Protocolo formal de soporte de salud mental y debriefing para el personal", cumple: false, peso: 7 },
+      { id: "tw-5", label: "Asignación de roles claros durante escenarios de reanimación (CRM)", cumple: false, peso: 9 }
+    ]);
+    
+    if (document.teleIcuChecklist) setTeleIcuChecklist(document.teleIcuChecklist);
+    else setTeleIcuChecklist([
+      { id: "tele-1", label: "Terminal para tele-interconsulta equipada con audio y video HD", cumple: false, peso: 8 },
+      { id: "tele-2", label: "Seguimiento remoto o soporte por tele-expertos para decisiones complejas", cumple: false, peso: 10 },
+      { id: "tele-3", label: "Protocolos de seguridad y confidencialidad encriptados para tele-ICU", cumple: false, peso: 8 },
+      { id: "tele-4", label: "Acceso remotos de familiares con mediación médica protocolizada", cumple: false, peso: 6 }
+    ]);
+
+    if (document.docenciaChecklist) setDocenciaChecklist(document.docenciaChecklist);
+    else setDocenciaChecklist([
+      { id: "doc-1", label: "Residencia médica acreditada en Terapia Intensiva", cumple: false, peso: 10 },
+      { id: "doc-2", label: "Enfermeros tutores e instructores dedicados a la capacitación continua", cumple: false, peso: 8 },
+      { id: "doc-3", label: "Ateneo clínico-bibliográfico semanal activo con actas de firmas", cumple: false, peso: 7 },
+      { id: "doc-4", label: "Participación en proyectos multicéntricos o registros nacionales de investigación", cumple: false, peso: 6 }
+    ]);
+
+    if (document.satiChecklist) setSatiChecklist(document.satiChecklist);
+    else setSatiChecklist([
+      { id: "sati-1", label: "Director o Jefe de Servicio acreditado como Miembro Especialista SATI", cumple: false, peso: 12 },
+      { id: "sati-2", label: "Médicos de guardia activa con curso FCCS o reválida certificada", cumple: false, peso: 10 },
+      { id: "sati-3", label: "Kinesiología intensiva integral y con presencia las 24 horas", cumple: false, peso: 12 },
+      { id: "sati-4", label: "Manual de Normas de Procedimientos de Organización y Funcionamiento SATI", cumple: false, peso: 8 }
+    ]);
+
+    if (document.indicadores) setIndicadores(document.indicadores);
+    else setIndicadores([
+      { id: "ind-1", nombre: "Mortalidad General Observada en UTI", valorActual: "", metaNacional: "< 25.0%", estado: "Bajo Control" },
+      { id: "ind-2", nombre: "Días Promedio de Estadía (ALOS)", valorActual: "", metaNacional: "< 6.5 días", estado: "Atención" },
+      { id: "ind-3", nombre: "Infecciones Asociadas a Catéter (IACS/1000 d)", valorActual: "", metaNacional: "< 2.5‰", estado: "Atención" },
+      { id: "ind-4", nombre: "Neumonías Asociadas a ARM (NAV/1005 d)", valorActual: "", metaNacional: "< 10.0‰", estado: "Crítico" },
+      { id: "ind-5", nombre: "Tasa de Extubación Fallida a 48 hs", valorActual: "", metaNacional: "< 5.0%", estado: "Bajo Control" }
+    ]);
+  };
+
+  const handleSaveSupabase = async (latestInstData?: InformacionInstitucion) => {
+    setLoadingSupabase(true);
+    try {
+      const activeInst = latestInstData || institucion;
+      
+      const fullDocument = {
+        institucion: activeInst,
+        profesionales,
+        estructuraItems,
+        equipos,
+        reporte,
+        teamworkChecklist,
+        teleIcuChecklist,
+        docenciaChecklist,
+        satiChecklist,
+        indicadores
+      };
+
+      const record = {
+        id: activeInst.id || `INST-${Math.floor(1000 + Math.random() * 9000)}`,
+        nombre: activeInst.nombre,
+        ciudad: activeInst.ciudad || "",
+        provincia: activeInst.provincia || "",
+        complejidad: activeInst.complejidad || "",
+        evaluador: activeInst.evaluadorResponsable || "",
+        fecha_evaluacion: activeInst.fechaEvaluacion || new Date().toISOString().split('T')[0],
+        data: fullDocument
+      };
+
+      await guardarInstitucionSupabase(record);
+      
+      // Refresh Supabase list
+      const rows = await cargarInstitucionesSupabase();
+      setSupabaseInstituciones(rows);
+    } catch (err) {
+      console.error("Error guardando en Supabase:", err);
+      throw err;
+    } finally {
+      setLoadingSupabase(false);
+    }
+  };
+
+  const handleDeleteSupabase = async (id: string) => {
+    setLoadingSupabase(true);
+    try {
+      await eliminarInstitucionSupabase(id);
+      
+      // Refresh list
+      const rows = await cargarInstitucionesSupabase();
+      setSupabaseInstituciones(rows);
+      
+      // If we deleted the active record, select another one or clear out
+      if (activeInstId === id) {
+        if (rows.length > 0) {
+          handleSelectSupabaseInst(rows[0].id, rows);
+        } else {
+          setActiveInstId("");
+          setProfesionales([]);
+          setEstructuraItems(DEFAULT_ESTRUCTURA_ITEMS.map(item => ({ ...item, cumple: false })));
+          setEquipos(DEFAULT_EQUIPOS_CRITICOS);
+          setReporte(null);
+        }
+      }
+    } catch (err) {
+      console.error("Error eliminando de Supabase:", err);
+      throw err;
+    } finally {
+      setLoadingSupabase(false);
+    }
+  };
 
   // Derive active institucion
   const institucion = instituciones.find(i => i.id === activeInstId) || {
@@ -182,6 +414,9 @@ export default function App() {
         console.error("Error parsing backup data to recover:", err);
       }
     }
+
+    // C. Load database rows automatically on application start
+    handleLoadSupabase();
   }, []);
 
   // Sync current data to LocalStorage backup
@@ -500,6 +735,13 @@ export default function App() {
                   onSave={handleSaveInstitucion}
                   onAdd={handleAddInstitucion}
                   onDuplicate={handleDuplicateInstitucion}
+                  onSaveSupabase={handleSaveSupabase}
+                  onLoadSupabase={handleLoadSupabase}
+                  onDeleteSupabase={handleDeleteSupabase}
+                  supabaseInstituciones={supabaseInstituciones}
+                  onSelectSupabaseInst={handleSelectSupabaseInst}
+                  loadingSupabase={loadingSupabase}
+                  supabaseConfigured={isSupabaseConfigured()}
                 />
                 <InformacionInstitucionForm 
                   data={institucion} 
