@@ -1,0 +1,6 @@
+{
+  "name": "Sistema de Valoración de UCIs Dr Rafael Avila",
+  "description": "Sistema avanzado para evaluar la estructura, personal y procesos de terapias intensivas en Argentina bajo normas de la SATI y el Ministerio de Salud, con auditoría inteligente de Gemini.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
