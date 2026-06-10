@@ -4,7 +4,8 @@ import {
   isSupabaseConfigured, 
   guardarInstitucionSupabase, 
   cargarInstitucionesSupabase, 
-  eliminarInstitucionSupabase 
+  eliminarInstitucionSupabase,
+  probarConexionSupabase
 } from "./services/supabaseService";
 import { DEFAULT_ESTRUCTURA_ITEMS } from "./data/estructuraItems";
 import { IdentificacionInstitucionalHeader } from "./components/IdentificacionInstitucionalHeader";
@@ -59,6 +60,15 @@ export default function App() {
   // Supabase Integration States
   const [supabaseInstituciones, setSupabaseInstituciones] = useState<any[]>([]);
   const [loadingSupabase, setLoadingSupabase] = useState<boolean>(false);
+  const [supabaseConnectionStatus, setSupabaseConnectionStatus] = useState<{
+    tested: boolean;
+    success: boolean;
+    message: string;
+  }>({
+    tested: false,
+    success: false,
+    message: ""
+  });
 
   const handleLoadSupabase = async () => {
     if (!isSupabaseConfigured()) return;
@@ -111,7 +121,7 @@ export default function App() {
         }
       }
     } catch (err) {
-      console.error("Error cargando instituciones desde Supabase:", err);
+      console.warn("Error cargando instituciones desde Supabase:", err);
     } finally {
       setLoadingSupabase(false);
     }
@@ -247,7 +257,7 @@ export default function App() {
       const rows = await cargarInstitucionesSupabase();
       setSupabaseInstituciones(rows);
     } catch (err) {
-      console.error("Error guardando en Supabase:", err);
+      console.warn("Error guardando en Supabase:", err);
       throw err;
     } finally {
       setLoadingSupabase(false);
@@ -276,7 +286,7 @@ export default function App() {
         }
       }
     } catch (err) {
-      console.error("Error eliminando de Supabase:", err);
+      console.warn("Error eliminando de Supabase:", err);
       throw err;
     } finally {
       setLoadingSupabase(false);
@@ -415,7 +425,16 @@ export default function App() {
       }
     }
 
-    // C. Load database rows automatically on application start
+    // C. Load database rows automatically on application start and run connection test
+    const runConnectionTest = async () => {
+      const result = await probarConexionSupabase();
+      setSupabaseConnectionStatus({
+        tested: true,
+        success: result.success,
+        message: result.message
+      });
+    };
+    runConnectionTest();
     handleLoadSupabase();
   }, []);
 
@@ -742,6 +761,7 @@ export default function App() {
                   onSelectSupabaseInst={handleSelectSupabaseInst}
                   loadingSupabase={loadingSupabase}
                   supabaseConfigured={isSupabaseConfigured()}
+                  supabaseConnectionStatus={supabaseConnectionStatus}
                 />
                 <InformacionInstitucionForm 
                   data={institucion} 

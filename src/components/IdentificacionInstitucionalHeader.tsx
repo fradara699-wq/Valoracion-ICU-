@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { InformacionInstitucion, TipoInstitucionSec, NivelComplejidad, SectorTipo } from "../types";
+import { getSupabaseConfigStatus } from "../services/supabaseService";
 import { 
   Building2, 
   Search, 
@@ -40,6 +41,11 @@ interface Props {
   onSelectSupabaseInst: (id: string) => void;
   loadingSupabase: boolean;
   supabaseConfigured: boolean;
+  supabaseConnectionStatus?: {
+    tested: boolean;
+    success: boolean;
+    message: string;
+  };
 }
 
 const LOGO_OPTIONS = ["🏥", "🏢", "🏛️", "🩺", "❤️", "🔬", "🛡️"];
@@ -81,7 +87,8 @@ export const IdentificacionInstitucionalHeader: React.FC<Props> = ({
   supabaseInstituciones,
   onSelectSupabaseInst,
   loadingSupabase,
-  supabaseConfigured
+  supabaseConfigured,
+  supabaseConnectionStatus
 }) => {
   // Find current active institution
   const activeInst = instituciones.find(i => i.id === activeId) || instituciones[0] || {
@@ -483,8 +490,8 @@ export const IdentificacionInstitucionalHeader: React.FC<Props> = ({
               Sincronización con Supabase (Nube)
             </h3>
             {supabaseConfigured ? (
-              <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse inline-block" /> Conectado
+              <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1 animate-pulse">
+                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full inline-block" /> Configurado
               </span>
             ) : (
               <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full border border-amber-200 flex items-center gap-1">
@@ -530,13 +537,34 @@ export const IdentificacionInstitucionalHeader: React.FC<Props> = ({
           </div>
         </div>
 
+        {/* Connection health test status message (automatic & live) */}
+        {supabaseConnectionStatus && supabaseConnectionStatus.tested && (
+          <div className={`mb-4 p-3 rounded-xl text-xs flex items-center gap-2 font-bold border ${
+            supabaseConnectionStatus.success 
+              ? "bg-emerald-50 border-emerald-150 text-emerald-800" 
+              : "bg-red-50 border-red-150 text-red-800"
+          }`}>
+            {supabaseConnectionStatus.success ? (
+              <>
+                <Check className="w-4 h-4 text-emerald-650 shrink-0" />
+                <span>Supabase conectado correctamente</span>
+              </>
+            ) : (
+              <>
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                <span>Error de conexión Supabase: {supabaseConnectionStatus.message}</span>
+              </>
+            )}
+          </div>
+        )}
+
         {/* Global errors or success messages of Supabase actions */}
         {supabaseErrorState && (
           <div className="mb-4 p-3 bg-red-50 border border-red-150 text-red-850 rounded-xl text-xs flex items-center gap-2 font-medium">
             <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
             <span>{supabaseErrorState}</span>
             <span className="text-[10px] text-red-400 ml-auto">
-              (Configure <b>VITE_SUPABASE_ANON_KEY</b> en los secretos del proyecto o archivo .env.)
+              (Configure <b>VITE_SUPABASE_ANON_KEY</b> y <b>VITE_SUPABASE_URL</b> en secrets.)
             </span>
           </div>
         )}
@@ -549,12 +577,33 @@ export const IdentificacionInstitucionalHeader: React.FC<Props> = ({
         )}
 
         {!supabaseConfigured && (
-          <div className="mb-4 p-4 bg-slate-50 border border-slate-250 rounded-xl">
+          <div className="mb-4 p-4 bg-slate-50 border border-slate-250 rounded-xl space-y-2">
             <span id="sup-missing-key-banner" className="text-xs text-slate-500 leading-relaxed block">
-              💡 <b>Conexión segura lista:</b> Para enviar evaluaciones a la nube y poder abrirlas en tiempo real desde cualquier computadora, edite los Secrets en el panel y asigne la clave <b>VITE_SUPABASE_ANON_KEY</b> y <b>VITE_SUPABASE_URL</b>. Mientras no esté configurada, la aplicación guardará las instituciones localmente.
+              💡 <b>Conexión segura lista:</b> Para enviar evaluaciones a la nube y poder abrirlas en tiempo real desde cualquier computadora, proporcione las variables de entorno:
             </span>
+            <div className="text-xs space-y-1 font-semibold">
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${getSupabaseConfigStatus().missingUrl ? 'bg-red-500' : 'bg-emerald-500'}`} />
+                <span className="font-mono">VITE_SUPABASE_URL:</span>
+                {getSupabaseConfigStatus().missingUrl ? (
+                  <span className="text-red-650 font-bold">❌ Variable ausente o incorrecta</span>
+                ) : (
+                  <span className="text-emerald-700 font-bold">✔️ Detectada correctamente</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${getSupabaseConfigStatus().missingKey ? 'bg-red-500' : 'bg-emerald-500'}`} />
+                <span className="font-mono">VITE_SUPABASE_ANON_KEY:</span>
+                {getSupabaseConfigStatus().missingKey ? (
+                  <span className="text-red-650 font-bold">❌ Variable ausente o incorrecta (debe iniciar con sb_publishable_)</span>
+                ) : (
+                  <span className="text-emerald-700 font-bold">✔️ Detectada correctamente</span>
+                )}
+              </div>
+            </div>
           </div>
         )}
+
 
         {/* Saved institutions list panel */}
         {supabaseConfigured && (

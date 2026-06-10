@@ -12,10 +12,66 @@ export interface SupabaseInstitucion {
   created_at?: string;
 }
 
+export interface SupabaseConfigStatus {
+  configured: boolean;
+  missingUrl: boolean;
+  missingKey: boolean;
+  url: string;
+  key: string;
+}
+
+// Retrieves configuration status and exact values for diagnostic reporting
+export function getSupabaseConfigStatus(): SupabaseConfigStatus {
+  // @ts-ignore
+  const url = import.meta.env?.VITE_SUPABASE_URL || "";
+  // @ts-ignore
+  const key = import.meta.env?.VITE_SUPABASE_ANON_KEY || "";
+
+  const isUrlValid = url.trim() !== "" && !url.includes("PEGAR_") && !url.includes("MY_APP_");
+  const isKeyValid = key.trim() !== "" && key !== "PEGAR_PUBLISHABLE_KEY" && !key.includes("PEGAR_PUBLISHABLE") && !key.includes("PEGAR_");
+
+  return {
+    configured: isUrlValid && isKeyValid,
+    missingUrl: !isUrlValid,
+    missingKey: !isKeyValid,
+    url,
+    key
+  };
+}
+
 // Checks if Supabase client is configured with a real key
 export function isSupabaseConfigured(): boolean {
-  const key = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || "";
-  return key !== "" && key !== "PEGAR_PUBLISHABLE_KEY" && !key.includes("PEGAR_PUBLISHABLE");
+  return getSupabaseConfigStatus().configured;
+}
+
+/**
+ * Test the connection to Supabase database by attempting to query one ID from the 'instituciones' table.
+ */
+export async function probarConexionSupabase(): Promise<{ success: boolean; message: string }> {
+  const status = getSupabaseConfigStatus();
+  if (!status.configured) {
+    let missingInfo = "";
+    if (status.missingUrl && status.missingKey) {
+      missingInfo = "Faltan configurar VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY.";
+    } else if (status.missingUrl) {
+      missingInfo = "Falta configurar la variable de entorno VITE_SUPABASE_URL.";
+    } else {
+      missingInfo = "Falta configurar la de entorno VITE_SUPABASE_ANON_KEY.";
+    }
+    return { success: false, message: missingInfo };
+  }
+
+  try {
+    const { error } = await supabase.from("instituciones").select("id").limit(1);
+    if (error) {
+      console.warn("Error en prueba de conexión con Supabase:", error);
+      return { success: false, message: `Error en la base de datos: ${error.message}` };
+    }
+    return { success: true, message: "Supabase conectado correctamente" };
+  } catch (err: any) {
+    console.warn("Excepción al probar conexión con Supabase:", err);
+    return { success: false, message: `Error de red o configuración: ${err.message || err}` };
+  }
 }
 
 /**
@@ -42,7 +98,7 @@ export async function guardarInstitucionSupabase(supabaseData: SupabaseInstituci
     }, { onConflict: 'id' });
 
   if (error) {
-    console.error("Error guardando en Supabase:", error);
+    console.warn("Error guardando en Supabase:", error);
     throw new Error(error.message);
   }
 
@@ -63,7 +119,7 @@ export async function cargarInstitucionesSupabase(): Promise<SupabaseInstitucion
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("Error cargando de Supabase:", error);
+    console.warn("Error cargando de Supabase:", error);
     throw new Error(error.message);
   }
 
@@ -84,7 +140,7 @@ export async function eliminarInstitucionSupabase(id: string) {
     .eq("id", id);
 
   if (error) {
-    console.error("Error eliminando de Supabase:", error);
+    console.warn("Error eliminando de Supabase:", error);
     throw new Error(error.message);
   }
 
