@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { InformacionInstitucion, TipoInstitucionSec, NivelComplejidad, SectorTipo } from "../types";
-import { getSupabaseConfigStatus } from "../services/supabaseService";
+import { getSupabaseConfigStatus, probarConexionSupabase } from "../services/supabaseService";
 import { 
   Building2, 
   Search, 
@@ -141,6 +141,22 @@ export const IdentificacionInstitucionalHeader: React.FC<Props> = ({
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [supabaseSaveSuccess, setSupabaseSaveSuccess] = useState(false);
   const [supabaseErrorState, setSupabaseErrorState] = useState<string | null>(null);
+
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [manualTestResult, setManualTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const handleManualTestConnection = async () => {
+    setTestingConnection(true);
+    setManualTestResult(null);
+    try {
+      const result = await probarConexionSupabase();
+      setManualTestResult(result);
+    } catch (err: any) {
+      setManualTestResult({ success: false, message: err?.message || String(err) });
+    } finally {
+      setTestingConnection(false);
+    }
+  };
 
   const handleSupabaseSave = async () => {
     if (!isNombreValido) return;
@@ -490,8 +506,8 @@ export const IdentificacionInstitucionalHeader: React.FC<Props> = ({
               Sincronización con Supabase (Nube)
             </h3>
             {supabaseConfigured ? (
-              <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1 animate-pulse">
-                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full inline-block" /> Configurado
+              <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                🟢 Supabase conectado correctamente
               </span>
             ) : (
               <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full border border-amber-200 flex items-center gap-1">
@@ -501,6 +517,17 @@ export const IdentificacionInstitucionalHeader: React.FC<Props> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 text-right">
+            <button
+              id="btn-supabase-test-top"
+              type="button"
+              onClick={handleManualTestConnection}
+              disabled={testingConnection || loadingSupabase}
+              className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-755 border border-blue-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              title="Probar conexión Supabase"
+            >
+              <Database className={`w-3.5 h-3.5 ${testingConnection ? 'animate-spin text-blue-500' : 'text-blue-500'}`} />
+              {testingConnection ? "Probando..." : "Probar conexión Supabase"}
+            </button>
             <button
               id="btn-supabase-refresh-top"
               type="button"
@@ -528,7 +555,7 @@ export const IdentificacionInstitucionalHeader: React.FC<Props> = ({
               type="button"
               onClick={handleSupabaseDeleteActive}
               disabled={loadingSupabase || !supabaseConfigured || !activeInst.id || activeInst.id === "INST-NUEVA"}
-              className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-750 border border-red-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+              className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-755 border border-red-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
               title="Eliminar de Supabase"
             >
               <Trash2 className="w-3.5 h-3.5 text-red-500" />
@@ -536,6 +563,27 @@ export const IdentificacionInstitucionalHeader: React.FC<Props> = ({
             </button>
           </div>
         </div>
+
+        {/* Manual Connection test alert message */}
+        {manualTestResult && (
+          <div className={`mb-4 p-3 rounded-xl text-xs flex items-center gap-2 font-bold border ${
+            manualTestResult.success 
+              ? "bg-emerald-50 border-emerald-150 text-emerald-800" 
+              : "bg-red-50 border-red-150 text-red-800"
+          }`}>
+            {manualTestResult.success ? (
+              <>
+                <Check className="w-4 h-4 text-emerald-650 shrink-0" />
+                <span>Conexión exitosa</span>
+              </>
+            ) : (
+              <>
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                <span>Error de conexión: {manualTestResult.message}</span>
+              </>
+            )}
+          </div>
+        )}
 
         {/* Connection health test status message (automatic & live) */}
         {supabaseConnectionStatus && supabaseConnectionStatus.tested && (

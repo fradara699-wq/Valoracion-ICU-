@@ -23,9 +23,9 @@ export interface SupabaseConfigStatus {
 // Retrieves configuration status and exact values for diagnostic reporting
 export function getSupabaseConfigStatus(): SupabaseConfigStatus {
   // @ts-ignore
-  const url = import.meta.env?.VITE_SUPABASE_URL || "";
+  const url = import.meta.env.VITE_SUPABASE_URL || "";
   // @ts-ignore
-  const key = import.meta.env?.VITE_SUPABASE_ANON_KEY || "";
+  const key = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 
   const isUrlValid = url.trim() !== "" && !url.includes("PEGAR_") && !url.includes("MY_APP_");
   const isKeyValid = key.trim() !== "" && key !== "PEGAR_PUBLISHABLE_KEY" && !key.includes("PEGAR_PUBLISHABLE") && !key.includes("PEGAR_");
