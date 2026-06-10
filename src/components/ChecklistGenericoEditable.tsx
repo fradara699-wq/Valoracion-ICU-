@@ -10,22 +10,20 @@ interface ChecklistItem {
 
 interface Props {
   title: string;
-  subtitle?: string;
-  description?: string;
-  icon?: React.ComponentType<any>;
+  subtitle: string;
+  icon: React.ComponentType<any>;
   items: ChecklistItem[];
   onChange: (updated: ChecklistItem[]) => void;
-  accentColor?: "emerald" | "blue" | "indigo" | "teal";
+  accentColor: "emerald" | "blue" | "indigo" | "teal";
 }
 
 export const ChecklistGenericoEditable: React.FC<Props> = ({
   title,
   subtitle,
-  description,
   icon: Icon,
   items,
   onChange,
-  accentColor = "indigo"
+  accentColor
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -124,14 +122,14 @@ export const ChecklistGenericoEditable: React.FC<Props> = ({
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-5 border-b border-slate-100">
         <div className="flex items-center gap-3">
           <div className="p-3 bg-slate-50 border border-slate-150 rounded-xl text-slate-650 shrink-0">
-            {Icon ? <Icon className="w-6 h-6 text-slate-705" /> : <CheckSquare className="w-6 h-6 text-slate-705" />}
+            <Icon className="w-6 h-6 text-slate-705" />
           </div>
           <div>
             <h2 className="text-lg md:text-xl font-bold text-slate-900 tracking-tight font-sans uppercase">
               {title}
             </h2>
             <p className="text-xs md:text-sm text-slate-500 mt-0.5">
-              {subtitle || description}
+              {subtitle}
             </p>
           </div>
         </div>
